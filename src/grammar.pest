@@ -1,0 +1,51 @@
+//
+// Created by intellij-pest on 2025-04-14
+// grammar
+// Author: wspeirs
+//
+
+WHITESPACE = _{ (" ")+ | "\t" | NEWLINE }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | (!"//" ~ ANY)* ~ "//" ~ (!NEWLINE ~ ANY)* ~ "\n" }
+
+identifier_char = _{ ASCII_ALPHANUMERIC | "_" }
+identifier      =  { (ASCII_ALPHA) ~ identifier_char* }
+type_name = { identifier }  // for now
+
+integer_literal = { ASCII_DIGIT ~ ASCII_DIGIT* }
+float_literal   = { ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+string_literal  = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+number          = { float_literal | integer_literal }
+
+literal = { string_literal | number }
+
+bin_op     = { "+" | "-" | "*" | "/" | "%" }
+comparator = { ">" | "<" | ">=" | "<=" }
+
+conditional = { (expression ~ comparator ~ expression) | expression }
+if_expression = {
+    "if" ~ conditional ~ "{" ~ expression+ ~ "}" ~
+    ("else" ~ "{" ~ expression+ ~ "}")?
+}
+
+expression = { primary ~ (bin_op ~ primary)* ~ (";")? }
+primary    = { if_expression | ("(" ~ expression ~ ")") | literal | identifier }
+
+statement = { let_binding | if_expression | expression }
+
+let_binding = { "let" ~ identifier ~ (":" ~ type_name)? ~ "=" ~ expression }
+
+main_args = { identifier ~ ":" ~ "List" ~ "<" ~ "String" ~ ">" }
+main_env = { identifier ~ ":" ~ "Map" ~ "<" ~ "String" ~ "," ~ "String" ~ ">" }
+main_result = {
+    "isize" |
+    "Result" ~ "<" ~ "isize" ~ "," ~ "isize" ~ ">"
+}
+
+main = {
+    "main" ~ "(" ~ main_args? ~ ("," ~ main_env)? ~ ")" ~ ("->" ~ main_result)?
+}
+
+// for now, a program is _just_ a main function
+file = { SOI ~ main ~ "{" ~ (statement)* ~ "}" ~ EOI }
+
+
