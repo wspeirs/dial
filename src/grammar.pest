@@ -8,32 +8,149 @@ WHITESPACE = _{ (" ")+ | "\t" | NEWLINE }
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | (!"//" ~ ANY)* ~ "//" ~ (!NEWLINE ~ ANY)* ~ "\n" }
 
 identifier_char = _{ ASCII_ALPHANUMERIC | "_" }
-identifier      =  { (ASCII_ALPHA) ~ identifier_char* }
-type_name = { identifier }  // for now
+identifier      = @{ (ASCII_ALPHA) ~ identifier_char* }  // TODO: we want to allow a variable to start with an _, so it might be easier to change this, then enforce in the type-checker?
+type_name       = @{ ASCII_ALPHA_UPPER ~ ASCII_ALPHA* }  // TODO: all the built-in types
 
-integer_literal = { ASCII_DIGIT ~ ASCII_DIGIT* }
-float_literal   = { ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+true_literal    = @{ ("T"|"t") ~ "rue" }
+false_literal   = @{ ("F"|"f") ~ "alse" }
+boolean_literal =  { true_literal | false_literal }
+integer_literal =  { ASCII_DIGIT ~ ASCII_DIGIT* }
+float_literal   =  { ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 string_literal  = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-number          = { float_literal | integer_literal }
+number          = _{ float_literal | integer_literal }
+literal         = _{ string_literal | number | boolean_literal }
 
-literal = { string_literal | number }
+visibility = { "pub" | "priv" }
 
-bin_op     = { "+" | "-" | "*" | "/" | "%" }
-comparator = { ">" | "<" | ">=" | "<=" }
+generic_types = { "<" ~ type_name ~ ("," ~ type_name)* ~ ">" }
+lang_type     = { type_name ~ generic_types? }  // can't just call it "type" as that's a keyword in Rust :-)
 
-conditional = { (expression ~ comparator ~ expression) | expression }
-if_expression = {
-    "if" ~ conditional ~ "{" ~ expression+ ~ "}" ~
-    ("else" ~ "{" ~ expression+ ~ "}")?
+binary_operator   = { "+" | "-" | "*" | "/" | "%" | "&" | "|" | "^" | "<<" | ">>" }
+comparator        = { ">=" | "<=" | ">" | "<" | "==" | "!=" }
+boolean_operator  = { "and" | "AND" | "&&" | "or" | "OR" | "||" }
+binary_assignment = { "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" }
+
+operator_expression = {
+      (expression ~ "?")  // error_propagation_expression
+    | (("-" ~ expression) | ("!" ~ expression) | (("not" | "NOT") ~ expression))  // negation_expression
+    | (expression ~ binary_assignment ~ expression)  // compound_assignment_expression
+    | (expression ~ binary_operator ~ expression)  // arithmetic_or_logical_expression
+    | (expression ~ comparator ~ expression)  // comparison_expression
+    | (expression ~ boolean_operator ~ expression)  // lazy_boolean_expression
+//     | typecast_expression
+    | (expression ~ "=" ~ expression)  // assignment_expression
 }
 
-expression = { primary ~ (bin_op ~ primary)* ~ (";")? }
-primary    = { if_expression | ("(" ~ expression ~ ")") | literal | identifier }
+return_expression = { "return" ~ expression }
 
-statement = { let_binding | if_expression | expression }
+break_expression = { "break" ~ expression }
 
-let_binding = { "let" ~ identifier ~ (":" ~ type_name)? ~ "=" ~ expression }
+continue_expression = { "continue" }
 
+field_expression = { expression ~ "." ~ identifier }
+
+method_call_expression = { expression ~ "." ~ identifier ~ generic_types? ~ "(" ~ call_params? ~ ")" }
+
+call_params     = { expression ~ ("," ~ expression)* }
+call_expression = { identifier ~ "(" ~ call_params? ~ ")" }
+
+tuple_indexing_expression = { expression ~ "." ~ integer_literal }  // do we also support array notation for tuples?
+tuple_expression = { "(" ~ expression ~ ("," ~ expression)* ~ ")" }
+
+index_expression = { expression ~ "[" ~ expression ~ "]" }
+
+array_element    = { (expression ~ ("," ~ expression)* ~ ","?) | (expression ~ ";" ~ expression) }
+array_expression = { "[" ~ array_element? ~ "]" }
+
+grouped_expression = { "(" ~ expression ~ ")" }
+
+let_statement = { "let" ~ identifier ~ (":" ~ lang_type)? ~ ("=" ~ expression ~ ("else" ~ block_expression)?)?}
+
+implementation = { "impl" ~ generic_types ~ lang_type ~ "{" ~ (constant_item | function) ~ "}" }
+
+trait_item = { constant_item | function_signature | function }
+lang_trait = { "trait" ~ identifier ~ generic_types? ~ "{" ~ trait_item+ ~ "}" }
+
+constant_item = { "const" ~ identifier ~ ":" ~ type_name ~ "=" ~ expression }
+
+enum_item   = { identifier ~ ("(" ~ lang_type ~ ("," ~ lang_type)* ~ ")") | ("{" ~ field+ ~ "}") }  // NOTE: if field changes, this needs to be updated
+enumeration = { "enum" ~ identifier ~ "{" ~ enum_item ~ ("," ~ enum_item)* }
+
+record = { "record" ~ type_name ~ "(" ~ field ~ ")" ~ "{" ~ (visibility ~ field)+ ~ function+ ~ "}" }
+
+field = { identifier ~ ":" ~ lang_type } // TODO: default params, and lambdas?
+class = { "class" ~ type_name ~ "{" ~ (visibility ~ field)+ ~ function+ ~ "}" } // TODO: constructor, destructor
+
+return_type        = { ("(" ~ lang_type ~ ("," ~ lang_type)+ ~ ")") | lang_type }  // note: can't have a single-item tuple here
+function_params    = { "self"? ~ (identifier ~ ":" ~ type_name)? ~ ("," ~ identifier ~ ":" ~ type_name)* }  // move keyword, references?
+function_signature = { ("fun" | "fn" | "def") ~ identifier ~ generic_types? ~ "(" ~ function_params ~ ")" ~ ("->" ~ lang_type)? }
+function           = { visibility ~ function_signature ~ (block_expression | ";") }
+
+use_declaration = { "use" ~ identifier ~ ("::" ~ identifier)* ~ ("as" ~ identifier)? }
+
+item = {
+      use_declaration
+    | function
+//     | type_alias
+    | class
+    | record
+    | enumeration
+//     | union
+    | constant_item
+//     | StaticItem
+    | lang_trait
+    | implementation
+}
+
+expression_without_block = {
+      literal
+//     | path_expression
+    | operator_expression
+    | grouped_expression
+    | array_expression
+    | index_expression
+    | tuple_expression
+    | tuple_indexing_expression
+    | class_expression
+    | record_expression
+    | call_expression
+    | method_call_expression
+    | field_expression
+    | closure_expression
+    | continue_expression
+    | break_expression
+    | range_expression
+    | return_expression
+//     | underscore_expression
+}
+
+expression_with_block = {
+      block_expression
+//     | const_block_expression
+//     | loop_expression  // TOOD: this should really be while_expression and while_let_expression
+    | while_expression
+//     | while_let_expression  // punt for now
+    | if_expression
+//     | if_let_expression  // punt for now
+//     | match_expression   // punt for now
+}
+
+block_expression = { "{" ~ statements ~ "}" }
+
+expression = { expression_without_block | expression_with_block }
+expression_statement = { (expression_without_block ~ ";") | (expression_with_block ~ ";"?)}
+
+statement = {
+      item
+    | let_statement
+    | expression_statement
+    | ";"
+}
+
+statements = { expression_without_block | (statement+ ~ expression_without_block) }
+
+
+// could do these w/type checking
 main_args = { identifier ~ ":" ~ "List" ~ "<" ~ "String" ~ ">" }
 main_env = { identifier ~ ":" ~ "Map" ~ "<" ~ "String" ~ "," ~ "String" ~ ">" }
 main_result = {
