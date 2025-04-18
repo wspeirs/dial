@@ -1,0 +1,116 @@
+/*
+ * Sample program exercising the PEST grammar.
+ * Author: Generated AI
+ * Date: 2025-04-17 // Uses date format from request
+ */
+main() { // Conforms to the simple 'main()' structure allowed by the grammar
+
+    // use_declaration (item)
+    use Core::Io::Reader as MyReader;
+
+    // constant_item (item)
+    const GLOBAL_MAX: Int = 1000;
+
+    // let_statement examples
+    let mut counter: Int = 0; // let with type and initializer
+    let message = "Starting process..."; // let with inferred type (string_literal)
+    let is_active: Bool; // let with type, no initializer (grammar allows this)
+    let threshold = 42.5; // let with float_literal
+
+    // Assign a value later
+    is_active = True; // assignment_expression (uses boolean_literal 'True')
+
+    // enumeration (item)
+    enum Status {
+        Running(Int), // enum_item with tuple style data
+        Paused,       // simple enum_item
+        Stopped { code: Int, reason: String } // enum_item with struct style data (uses 'field')
+    }
+
+    // lang_trait (item)
+    trait Printable<T> { // trait with generic_types
+        // function_signature (trait_item)
+        fn format(self) -> String;
+        // constant_item (trait_item)
+        const DEFAULT_PREFIX: String = "> ";
+        // function definition also allowed (trait_item)
+        pub fn print_with_prefix(self) {
+            let output = Self::DEFAULT_PREFIX + self.format(); // Accessing const, calling method
+            print(output); // Assuming 'print' is a built-in function (call_expression)
+        }
+    }
+
+    // class (item)
+    class DataProcessor {
+        priv connection_id: Int
+        pub buffer: List<Byte> // Example using a generic type name
+
+        // function within class (item -> function)
+        pub fn process<T>(self, data: T) -> Bool { // function with generics and 'self' param
+            let temp_id = self.connection_id; // field_expression
+            let should_continue = not (temp_id == 0); // negation_expression, comparison_expression
+            print(data); // call_expression
+            self.buffer = [0; 10]; // assignment_expression with array_expression (value; count)
+            return should_continue and True; // return_expression with lazy_boolean_expression
+        }
+
+        priv fn internal_reset() { // Another function
+             self.connection_id = -1; // assignment_expression with negation_expression
+             // Empty block is implicitly allowed by `block_expression = { statements }` where statements can be empty
+        }
+    }
+
+    // implementation (item)
+    impl<T> Printable<T> for DataProcessor { // impl with generics for a type
+        // function definition within impl (item -> function)
+        fn format(self) -> String {
+             // Example using different expression types
+             let base = "Processor(ID: ";
+             let id_str = toString(self.connection_id); // Assume `toString` function (call_expression)
+             let status = if self.connection_id > 0 { "Active" } else { "Inactive" }; // if_expression
+             let result = base + id_str + ", Status: " + status + ")"; // binary_operator (+) on strings
+             result // Final expression in block
+        }
+        // Constant override could go here if grammar supported it in impl
+        // const DEFAULT_PREFIX: String = "DP> ";
+    }
+
+    // record (item)
+    record Point(x: Int, y: Int) { // Hypothetical simpler record structure if grammar allowed it
+    }
+
+    // More expression examples within main's scope
+    let proc_instance = DataProcessor(); // Assuming constructor call (call_expression)
+    let data_chunk = [10, 20, 30]; // array_expression (elements separated by comma)
+    proc_instance.process::<List<Int>>(data_chunk); // method_call_expression with explicit generic type
+    let current_id = proc_instance.connection_id; // field_expression
+
+    // operator_expression variants
+    let calc = (5 + 3) * 2 - 1; // arithmetic, grouped
+    counter += 1; // compound_assignment
+    counter -= calc / 2; // compound_assignment
+    let is_done = counter <= 0 or message == "Complete"; // comparison, lazy_boolean
+    let bit_op = counter & 0xFF ^ 0b1010; // bitwise operators (integer_literal allows simple digits)
+    let maybe_result = some_func()?; // error_propagation_expression (assuming some_func returns a Result type)
+
+    // Control Flow (while)
+    while counter < 10 and is_active { // while_expression
+        counter += 1;
+        if counter == 5 {
+            print("Halfway!"); // call_expression inside if
+            continue; // continue_expression
+        }
+        if counter >= 9 {
+            let final_val = counter * 10;
+            break final_val; // break_expression with value
+        }
+    }
+
+    // Array and Tuple expressions
+    let my_array = [1, 2, 3, 4, 5];
+    let first_element = my_array[0]; // index_expression
+    let my_tuple = (100, "Tuple Data", False, 3.14159); // tuple_expression
+    let tuple_item = my_tuple.1; // tuple_indexing_expression (string "Tuple Data")
+    let tuple_float = my_tuple.3; // tuple_indexing_expression (float 3.14159)
+
+}

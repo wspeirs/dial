@@ -17,8 +17,8 @@ boolean_literal =  { true_literal | false_literal }
 integer_literal =  { ASCII_DIGIT ~ ASCII_DIGIT* }
 float_literal   =  { ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 string_literal  = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-number          = _{ float_literal | integer_literal }
-literal         = _{ string_literal | number | boolean_literal }
+number          =  { float_literal | integer_literal }
+literal         =  { string_literal | number | boolean_literal }
 
 visibility = { "pub" | "priv" }
 
@@ -30,41 +30,61 @@ comparator        = { ">=" | "<=" | ">" | "<" | "==" | "!=" }
 boolean_operator  = { "and" | "AND" | "&&" | "or" | "OR" | "||" }
 binary_assignment = { "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" }
 
+numeric_negation = { "-" ~ expression }
+binary_negation  = { "!" ~ expression }
+logic_negation   = { ("not" | "NOT") ~ expression }
+
 operator_expression = {
-      (expression ~ "?")  // error_propagation_expression
-    | (("-" ~ expression) | ("!" ~ expression) | (("not" | "NOT") ~ expression))  // negation_expression
-    | (expression ~ binary_assignment ~ expression)  // compound_assignment_expression
-    | (expression ~ binary_operator ~ expression)  // arithmetic_or_logical_expression
-    | (expression ~ comparator ~ expression)  // comparison_expression
-    | (expression ~ boolean_operator ~ expression)  // lazy_boolean_expression
-//     | typecast_expression
-    | (expression ~ "=" ~ expression)  // assignment_expression
+      numeric_negation
+    | binary_negation
+    | logic_negation
+    | (primary_expression ~ "?")  // error_propagation_expression
+    | (primary_expression ~ binary_assignment ~ blockless_expression)  // compound_assignment_expression
+    | (primary_expression ~ binary_operator ~ blockless_expression)  // arithmetic_or_logical_expression
+    | (primary_expression ~ comparator ~ blockless_expression)  // comparison_expression
+    | (primary_expression ~ boolean_operator ~ blockless_expression)  // lazy_boolean_expression
+    | (primary_expression ~ "=" ~ blockless_expression)  // assignment_expression
 }
 
 return_expression = { "return" ~ expression }
+
+// range_to_inclusive_expr = { "..=" ~ expression }
+// range_inclusive_expr    = { expression ~ "..=" ~ expression }
+// range_expr              = { expression ~ ".." ~ expression }
+// range_from_expr         = { expression ~ ".." }
+// range_to_expr           = { ".." ~ expression }
+// range_full_expr         = { ".." }
+// range_expression = {
+//       range_to_inclusive_expr
+//     | range_inclusive_expr
+//     | range_expr
+//     | range_from_expr
+//     | range_to_expr
+//     | range_full_expr
+// }
 
 break_expression = { "break" ~ expression }
 
 continue_expression = { "continue" }
 
-field_expression = { expression ~ "." ~ identifier }
+field_expression = { primary_expression ~ "." ~ identifier }
 
-method_call_expression = { expression ~ "." ~ identifier ~ generic_types? ~ "(" ~ call_params? ~ ")" }
+method_call_expression = { primary_expression ~ "." ~ identifier ~ generic_types? ~ "(" ~ call_params? ~ ")" }
 
-call_params     = { expression ~ ("," ~ expression)* }
+call_params     = { blockless_expression ~ ("," ~ blockless_expression)* }
 call_expression = { identifier ~ "(" ~ call_params? ~ ")" }
 
-tuple_indexing_expression = { expression ~ "." ~ integer_literal }  // do we also support array notation for tuples?
-tuple_expression = { "(" ~ expression ~ ("," ~ expression)* ~ ")" }
+tuple_indexing_expression = { primary_expression ~ "." ~ integer_literal }  // do we also support array notation for tuples?
+tuple_expression = { "(" ~ blockless_expression ~ ("," ~ blockless_expression)* ~ ")" }
 
-index_expression = { expression ~ "[" ~ expression ~ "]" }
+index_expression = { primary_expression ~ "[" ~ blockless_expression ~ "]" }
 
-array_element    = { (expression ~ ("," ~ expression)* ~ ","?) | (expression ~ ";" ~ expression) }
+array_element    = { (blockless_expression ~ ("," ~ blockless_expression)* ~ ","?) | (blockless_expression ~ ";" ~ blockless_expression) }
 array_expression = { "[" ~ array_element? ~ "]" }
 
-grouped_expression = { "(" ~ expression ~ ")" }
+grouped_expression = { "(" ~ blockless_expression ~ ")" }
 
-let_statement = { "let" ~ identifier ~ (":" ~ lang_type)? ~ ("=" ~ expression ~ ("else" ~ block_expression)?)?}
+let_statement = { "let" ~ identifier ~ (":" ~ lang_type)? ~ ("=" ~ expression ~ ("else" ~ statement_block)?)?}
 
 implementation = { "impl" ~ generic_types ~ lang_type ~ "{" ~ (constant_item | function) ~ "}" }
 
@@ -76,7 +96,7 @@ constant_item = { "const" ~ identifier ~ ":" ~ type_name ~ "=" ~ expression }
 enum_item   = { identifier ~ ("(" ~ lang_type ~ ("," ~ lang_type)* ~ ")") | ("{" ~ field+ ~ "}") }  // NOTE: if field changes, this needs to be updated
 enumeration = { "enum" ~ identifier ~ "{" ~ enum_item ~ ("," ~ enum_item)* }
 
-record = { "record" ~ type_name ~ "(" ~ field ~ ")" ~ "{" ~ (visibility ~ field)+ ~ function+ ~ "}" }
+record = { "record" ~ type_name ~ "(" ~ field+ ~ ")" ~ "{" ~ (visibility ~ field)* ~ function* ~ "}" }
 
 field = { identifier ~ ":" ~ lang_type } // TODO: default params, and lambdas?
 class = { "class" ~ type_name ~ "{" ~ (visibility ~ field)+ ~ function+ ~ "}" } // TODO: constructor, destructor
@@ -84,7 +104,7 @@ class = { "class" ~ type_name ~ "{" ~ (visibility ~ field)+ ~ function+ ~ "}" } 
 return_type        = { ("(" ~ lang_type ~ ("," ~ lang_type)+ ~ ")") | lang_type }  // note: can't have a single-item tuple here
 function_params    = { "self"? ~ (identifier ~ ":" ~ type_name)? ~ ("," ~ identifier ~ ":" ~ type_name)* }  // move keyword, references?
 function_signature = { ("fun" | "fn" | "def") ~ identifier ~ generic_types? ~ "(" ~ function_params ~ ")" ~ ("->" ~ lang_type)? }
-function           = { visibility ~ function_signature ~ (block_expression | ";") }
+function           = { visibility ~ function_signature ~ (statement_block | ";") }
 
 use_declaration = { "use" ~ identifier ~ ("::" ~ identifier)* ~ ("as" ~ identifier)? }
 
@@ -97,37 +117,40 @@ item = {
     | enumeration
 //     | union
     | constant_item
-//     | StaticItem
+//     | static_item
     | lang_trait
     | implementation
 }
 
-expression_without_block = {
+primary_expression = {
       literal
-//     | path_expression
-    | operator_expression
     | grouped_expression
     | array_expression
-    | index_expression
     | tuple_expression
-    | tuple_indexing_expression
-    | class_expression
-    | record_expression
     | call_expression
-    | method_call_expression
-    | field_expression
-    | closure_expression
     | continue_expression
     | break_expression
-    | range_expression
     | return_expression
-//     | underscore_expression
 }
 
-expression_with_block = {
-      block_expression
-//     | const_block_expression
-//     | loop_expression  // TOOD: this should really be while_expression and while_let_expression
+blockless_expression = {
+      primary_expression
+    | operator_expression
+    | index_expression
+    | tuple_indexing_expression
+//     | class_expression  // TODO
+//     | record_expression  // TODO
+    | method_call_expression
+    | field_expression
+//     | closure_expression  // TODO
+//     | range_expression
+}
+
+while_expression = { "while" ~ blockless_expression ~ block_expression }
+if_expression    = { "if" ~ blockless_expression ~ block_expression ~ (("elif" | "else" ~ "if") ~ block_expression)* ~ ("else" ~ block_expression)? }
+
+block_expression = {
+      statement_block
     | while_expression
 //     | while_let_expression  // punt for now
     | if_expression
@@ -135,19 +158,18 @@ expression_with_block = {
 //     | match_expression   // punt for now
 }
 
-block_expression = { "{" ~ statements ~ "}" }
+statement_block = { "{" ~ statements ~ "}" }
 
-expression = { expression_without_block | expression_with_block }
-expression_statement = { (expression_without_block ~ ";") | (expression_with_block ~ ";"?)}
+expression = { blockless_expression | block_expression }
+expression_statement = { (blockless_expression ~ ";") | (block_expression ~ ";"?)}
 
 statement = {
-      item
-    | let_statement
+      let_statement
     | expression_statement
     | ";"
 }
 
-statements = { expression_without_block | (statement+ ~ expression_without_block) }
+statements = { blockless_expression | (statement+ ~ blockless_expression) }
 
 
 // could do these w/type checking
@@ -163,6 +185,6 @@ main = {
 }
 
 // for now, a program is _just_ a main function
-file = { SOI ~ main ~ "{" ~ (statement)* ~ "}" ~ EOI }
+file = { SOI ~ item* ~ main ~ "{" ~ statement+ ~ "}" ~ EOI }
 
 
